@@ -65,7 +65,7 @@ class PurePursuit(object):
         found = False
         #assume the index is the index of the line segment that the closest point lines on
 
-        for i in range(index, n - 1):
+        for i in range(index, self.n - 1):
             x0 = self.trajectory.points[i][0]
             y0 = self.trajectory.points[i][1]
             x1 = self.trajectory.points[i + 1][0]
@@ -76,7 +76,7 @@ class PurePursuit(object):
             b = x1 - x0
             c = x0*y1 - x1*y0
             #@Fritz's that calcualte the intersection of circle and line, given ax + by = c and circle at rx, ry with radius r
-            
+
             intersectx = 0
             intersecty = 0
 
@@ -87,16 +87,25 @@ class PurePursuit(object):
             return (intersectx, intersecty)
         else:
             raise Exception("no intersection found :((")
-
+        
     def get_curvature(self, goalx, goaly):
         return 2 * goalx / self.lookahead**2
+    
+    def find_lookhead(self):
+        pass
 
-    def drive_command(self):
+    def drive_command(self, goalx, goaly):
+        eta = np.pi / 2 - np.arctan(goaly / goalx) #might be np.atan2
+        # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
-        AckermannDrive.drive.steering_angle = -np.atan2(2 * self.lookahead * np.sin(nu) / self.lookahead)
+        AckermannDrive.header.stamp = rospy.time.now()
+        AckermannDrive.header.frame_id = "base_link"
+        AckermannDrive.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
+        
         #generalized sttering law by having a point ahead lecture slides
-        AckermannDrive.drive.steering_angle = -np.atan2(self.wheelbase_length * np.sin(nu) / self.lookahead)
-
+        # lfw = 0.05 #randomly defined based on lecture slides
+        # AckermannDrive.drive.steering_angle = -1 * np.arctan(self.wheelbase_length * np.sin(eta) / (self.lookahead / 2  + lfw/np.cos(eta)))
+        self.drive_pub.pub(AckermannDrive)
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
