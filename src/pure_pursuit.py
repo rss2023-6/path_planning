@@ -83,7 +83,6 @@ class PurePursuit(object):
             if(intersectx >= x0 and intersectx <= x1):
                 found = True
                 break
-        
         if(found):
             return (intersectx, intersecty)
         else:
@@ -91,18 +90,12 @@ class PurePursuit(object):
 
     def get_curvature(self, goalx, goaly):
         return 2 * goalx / self.lookahead**2
-    
-    def calculate_lookahead(self):
-        pass
-
-    def calculate_lookaheadpoint(self):
-        pass
 
     def drive_command(self):
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.drive.steering_angle = -np.atan2(2 * self.lookahead * np.sin(nu) / self.lookahead)
         #generalized sttering law by having a point ahead lecture slides
-        AckermannDrive.drive.steering_angle = -np.atan2(2 * self.lookahead * np.sin(nu) / self.lookahead)
+        AckermannDrive.drive.steering_angle = -np.atan2(self.wheelbase_length * np.sin(nu) / self.lookahead)
 
 
 if __name__=="__main__":
