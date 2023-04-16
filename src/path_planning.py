@@ -36,6 +36,8 @@ class PathPlan(object):
         self.map_origin = None
         self.current_pos = None
 
+        rospy.loginfo("planning initialized")
+
     # def transformation_matrix(self, th):
     #     return np.array([[np.cos(th), -np.sin(th), 0],
     #                         [np.sin(th), np.cos(th), 0],
@@ -61,18 +63,18 @@ class PathPlan(object):
 
     def odom_cb(self, msg): ######
         q = msg.pose.pose.orientation #not sure if we need this 
-        roll, pitch, th = euler_from_quaternion()
+        roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
         self.current_pos = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, th])
         self.initialized = True 
 
     def goal_cb(self, msg): ######
         start_pt = self.current_pos
-        goal_pt = msg.pose.pose.position.x, msg.pose.pose.position.y
+        goal_pt = msg.pose.position.x, msg.pose.position.y
 
-        start_px = start_pt #self.m_2_px(start_pt)
-        end_px = goal_pt #self.m_2_px(goal_pt)
+        start_px = tuple(start_pt) #self.m_2_px(start_pt)
+        end_px = tuple(goal_pt) #self.m_2_px(goal_pt)
 
-        self.plan_path(self, start_px, end_px, self.map_grid)
+        self.plan_path(start_px, end_px, self.map_grid)
 
     def plan_path(self, start_point, end_point, map): ######
         ## CODE FOR PATH PLANNING ##
@@ -98,12 +100,15 @@ class PathPlan(object):
         return dist  
 
     def neighbors(self, pt):
+        rospy.loginfo(pt)
         results = set()
-        for dx, dy in np.meshgrid([-1,0,1],[-1,0,1]):
-            nx, ny = pt[0] + dx, pt[1] + dy #indexing confusion
-            if (0<= nx < self.map_rows) and (0<= ny < self.map_cols):
-                if self.map([nx, ny]) == 0:
-                    results.add((nx, ny))
+        xv, yv = np.meshgrid([-1, 0, 1], [-1, 0, 1], indexing='ij')
+        for i in range(3):
+            for j in range(3):
+                nx, ny = pt[0] + xv[i,j], pt[1] + yv[i,j] #indexing confusion
+                if (0<= nx < self.map_rows) and (0<= ny < self.map_cols):
+                    if self.map([nx, ny]) == 0:
+                        results.add((nx, ny))
         return results
 
     def a_star(self, init, goal, map):
@@ -127,6 +132,8 @@ class PathPlan(object):
                     node = came_from[node]
                     path.append(node)
                 return list(reversed(path))
+            
+            rospy.loginfo(self.neighbors(current))
         
             for next in self.neighbors(current):
                 new_cost = cost_so_far[current] + self.map_cost(current, next) #distance 

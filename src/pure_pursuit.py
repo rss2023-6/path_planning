@@ -53,7 +53,7 @@ class PurePursuit(object):
         return np.linalg.norm(p - projection)
 
     def find_closest_segment_index(self, co_ordinate_array, current_location):
-        get_closest_points = np.vectorize(self.get_minimum_distance, signature='(n)->()')
+        get_closest_points = np.vectorize(self.get_minimum_distance, signature='(n),(n),(n)->()')
         closest_points = get_closest_points(co_ordinate_array[:-1], co_ordinate_array[1:], current_location)
         return np.argmin(closest_points)
 
@@ -76,6 +76,7 @@ class PurePursuit(object):
             b = x1 - x0
             c = x0*y1 - x1*y0
             #@Fritz's that calcualte the intersection of circle and line, given ax + by = c and circle at rx, ry with radius r
+<<<<<<< HEAD
             # convert line to slope intercept form, and then vectorize it
             mb = np.array([-a/b,c/b])
             p1 = np.array([x0,y0])
@@ -92,6 +93,11 @@ class PurePursuit(object):
             intersectpoints = np.array([p1+t[0]*v,p1+t[1]*v]) # Np array of both intersect points
             intersectx = intersectpoints[0][0] # arbitrarily picks first intersect point, may need to be changed
             intersecty = intersectpoints[0][1]
+=======
+
+            intersectx = 0
+            intersecty = 0
+>>>>>>> 6e5c3495418616bb1d8b377f6e6a069dc3a93015
 
             if(intersectx >= x0 and intersectx <= x1):
                 found = True
@@ -100,16 +106,25 @@ class PurePursuit(object):
             return (intersectx, intersecty)
         else:
             raise Exception("no intersection found :((")
-
+        
     def get_curvature(self, goalx, goaly):
         return 2 * goalx / self.lookahead**2
+    
+    def find_lookhead(self):
+        pass
 
-    def drive_command(self):
+    def drive_command(self, goalx, goaly):
+        eta = np.pi / 2 - np.arctan(goaly / goalx) #might be np.atan2
+        # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
-        AckermannDrive.drive.steering_angle = -np.atan2(2 * self.lookahead * np.sin(nu) / self.lookahead)
+        AckermannDrive.header.stamp = rospy.time.now()
+        AckermannDrive.header.frame_id = "base_link"
+        AckermannDrive.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
+        
         #generalized sttering law by having a point ahead lecture slides
-        AckermannDrive.drive.steering_angle = -np.atan2(self.wheelbase_length * np.sin(nu) / self.lookahead)
-
+        # lfw = 0.05 #randomly defined based on lecture slides
+        # AckermannDrive.drive.steering_angle = -1 * np.arctan(self.wheelbase_length * np.sin(eta) / (self.lookahead / 2  + lfw/np.cos(eta)))
+        self.drive_pub.pub(AckermannDrive)
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
