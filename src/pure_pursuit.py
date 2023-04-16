@@ -53,7 +53,7 @@ class PurePursuit(object):
         return np.linalg.norm(p - projection)
 
     def find_closest_segment_index(self, co_ordinate_array, current_location):
-        get_closest_points = np.vectorize(self.get_minimum_distance, signature='(n)->()')
+        get_closest_points = np.vectorize(self.get_minimum_distance, signature='(n),(n),(n)->()')
         closest_points = get_closest_points(co_ordinate_array[:-1], co_ordinate_array[1:], current_location)
         return np.argmin(closest_points)
 
