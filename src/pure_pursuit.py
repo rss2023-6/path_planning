@@ -49,7 +49,7 @@ class PurePursuit(object):
         found = False
         #assume the index is the index of the line segment that the closest point lines on
 
-        for i in range(index, n - 1):
+        for i in range(index, self.n - 1):
             x0 = self.trajectory.points[i][0]
             y0 = self.trajectory.points[i][1]
             x1 = self.trajectory.points[i + 1][0]
