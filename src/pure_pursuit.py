@@ -31,11 +31,27 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-    def get_line_segments(self):
-        pass
+    def get_coordinate_arrray(self, poses):
+        #Return an array of line segements where each segement represented as a 2x2 array of start and end coordinates
+        return np.array([[pose.position.x, pose.position.y] for pose in poses])
+    
+    def get_minimum_distance(v, w, p):
+        #Return minimum distance between line segment vw and point p
+        l2 = np.linalg.norm(v-w)**2  # |w-v|^2
+        if (l2 == 0.0):
+             return np.linalg.norm(p-v)**2 ;  # v == w case
+        #Consider the line extending the segment, parameterized as v + t (w - v).
+        # We find projection of point p onto the line. 
+        #It falls where t = [(p-v) . (w-v)] / |w-v|^2
+        #We clamp t from [0,1] to handle points outside the segment vw.
+        t = max(0, min(1, np.dot(p - v, w - v) / l2))
+        projection = v + t * (w - v);  # Projection falls on the segment
+        return np.linalg.norm(p - projection)
 
-    def find_closest_point(self):
-        pass
+    def find_closest_segment_index(self, co_ordinate_array, current_location):
+        get_closest_points = np.vectorize(self.get_minimum_distance, signature='(n)->()')
+        closest_points = get_closest_points(co_ordinate_array[:-1], co_ordinate_array[1:], current_location)
+        return np.argmin(closest_points)
 
     def find_circle_intersection(self):
         pass
