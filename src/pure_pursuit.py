@@ -31,6 +31,23 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
+    def get_line_segments(self):
+        pass
+
+    def find_closest_point(self):
+        pass
+
+    def find_circle_intersection(self):
+        pass
+
+    def calculate_lookahead(self):
+        pass
+
+    def calculate_lookaheadpoint(self):
+        pass
+
+    def drive_command(self):
+        pass
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
