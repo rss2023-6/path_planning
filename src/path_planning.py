@@ -54,6 +54,7 @@ class PathPlan(object):
         self.map_orientation = msg.info.origin.orientation #quaternion
         self.map_origin = msg.info.origin.position
 
+        
         #discretize map 
         self.map_rows = msg.info.height
         self.map_cols = msg.info.width
@@ -62,9 +63,9 @@ class PathPlan(object):
        
 
     def odom_cb(self, msg): ######
-        q = msg.pose.pose.orientation #not sure if we need this 
-        roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
-        self.current_pos = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y, th])
+        #q = msg.pose.pose.orientation #not sure if we need this 
+        #roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
+        self.current_pos = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y])
         self.initialized = True 
 
     def goal_cb(self, msg): ######
@@ -81,13 +82,14 @@ class PathPlan(object):
 
         path = self.a_star(start_point, end_point, map)
         if path:
+            rospy.loginfo(path)
             self.trajectory.points  = path
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
 
         # visualize trajectory Markers
-        self.trajectory.publish_viz()
+        self.trajectory.publish_viz(60)
 
 
     def map_cost(self, current, next):
@@ -97,23 +99,22 @@ class PathPlan(object):
 
     def dist_heuristic(self, goal, next):
         dist = np.sqrt((goal[0]-next[0])**2 + (goal[1]-next[1])**2)
+        rospy.loginfo(dist)
         return dist  
 
     def neighbors(self, pt):
-        rospy.loginfo(pt)
         results = set()
         xv, yv = np.meshgrid([-1, 0, 1], [-1, 0, 1], indexing='ij')
         for i in range(3):
             for j in range(3):
                 nx, ny = pt[0] + xv[i,j], pt[1] + yv[i,j] #indexing confusion
-                if (0<= nx < self.map_rows) and (0<= ny < self.map_cols):
-                    if self.map([nx, ny]) == 0:
-                        results.add((nx, ny))
+                if self.map_grid[int(nx)][int(ny)] == 0:
+                    results.add((nx, ny))
         return results
 
     def a_star(self, init, goal, map):
         frontier = PriorityQueue() 
-        frontier.put(init, 0)
+        frontier.put((0, init))
 
         came_from = dict()
         cost_so_far = dict()
@@ -122,25 +123,24 @@ class PathPlan(object):
         cost_so_far[init] = 0
 
         while not frontier.empty():
-            current = frontier.get()
+            
+            current = frontier.get()[1]
 
-            if current == goal: #close to end point
+            if self.dist_heuristic(current, goal) < 1: #close to end point
                 #get path 
-                path = [goal]
-                node = goal 
+                path = [current]
+                node = current
                 while node != init:
                     node = came_from[node]
                     path.append(node)
                 return list(reversed(path))
-            
-            rospy.loginfo(self.neighbors(current))
         
             for next in self.neighbors(current):
                 new_cost = cost_so_far[current] + self.map_cost(current, next) #distance 
                 if next not in cost_so_far or new_cost < cost_so_far[next]:
                     cost_so_far[next] = new_cost
                     priority = new_cost + self.dist_heuristic(goal, next)
-                    frontier.put(next, priority)
+                    frontier.put((priority, next))
                     came_from[next] = current  
 
         return None #"path not found"  
