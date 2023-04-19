@@ -22,24 +22,43 @@ class PurePursuit(object):
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
-        self.x = 0
-        self.y = 0
+        self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
+        self.previous_odom_message = None
+        self.current_location = np.array([0,0])
+        self.x = self.current_location[0]
+        self.y = self.current_location[1]
         self.theta = 0
         self.n = len(self.trajectory.points)
+        rospy.logerr("initialized")
+
+    def odom_callback(self, msg):
+        if(self.previous_odom_message != None):
+            curposition = msg.pose.pose.position
+            self.current_location = np.array([curposition.x,curposition.y])
+            self.x = curposition.x
+            self.y = curposition.y
+        self.previous_odom_message = msg
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
-        print "Receiving new trajectory:", len(msg.poses), "points"
+        #print "Receiving new trajectory:", len(msg.poses), "points"
+        rospy.logerr("received")
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
+        coordarr = self.get_coordinate_array(msg.poses)
+        rospy.logerr(coordarr.shape)
+        index = self.find_closest_segment_index(coordarr,self.current_location)
+        goalpos = self.find_circle_intersection(index)
+        if(goalpos != (0,0)):
+            self.drive_command(goalpos[0],goalpos[1])
 
     def get_coordinate_array(self, poses):
         #Return an array of line segements where each segement represented as a 2x2 array of start and end coordinates
         return np.array([[pose.position.x, pose.position.y] for pose in poses])
     
-    def get_minimum_distance(v, w, p):
+    def get_minimum_distance(self, v, w, p):
         #Return minimum distance between line segment vw and point p
         l2 = np.linalg.norm(v-w)**2  # |w-v|^2
         if (l2 == 0.0):
@@ -94,7 +113,7 @@ class PurePursuit(object):
             t = np.abs(t) # take abs value of t values to ensure direction along line segment is correct
             # if either of the t's are outside of (0,1), line segment doesn't touch circle
             solutionindex = [0]
-            print(t)
+            rospy.logerr(t)
             if(t[0] > 1 or t[0] <= 0):
                 solutionindex = [1]
                 if(t[1] > 1 or t[1] < 0):
@@ -108,7 +127,6 @@ class PurePursuit(object):
             intersect = np.array([[0, 0], [0, 0]])
             for i in solutionindex:
                 intersectpoints = np.array([p1+t[i]*v,p1+t[i]*v]) # Np array of both intersect points
-                print(intersectpoints)
                 self.intersectx = intersectpoints[i][0] # arbitrarily picks first intersect point, may need to be changed
                 self.intersecty = intersectpoints[i][1]
 
@@ -119,8 +137,9 @@ class PurePursuit(object):
         if(found):
             return (self.intersectx, self.intersecty)
         else:
-            raise Exception("no intersection found :((")
-        
+            rospy.logerr("no intersection found")
+            return (0,0)
+
     def get_curvature(self, goalx, goaly):
         return 2 * goalx / self.lookahead**2
     
@@ -133,8 +152,9 @@ class PurePursuit(object):
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.time.now()
         AckermannDrive.header.frame_id = "base_link"
+        AckermannDrive.drive.speed = self.speed
         AckermannDrive.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
-        
+        rospy.logerr(AckermannDrive.drive.steering_angle)
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
         # AckermannDrive.drive.steering_angle = -1 * np.arctan(self.wheelbase_length * np.sin(eta) / (self.lookahead / 2  + lfw/np.cos(eta)))
