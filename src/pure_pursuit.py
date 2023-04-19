@@ -76,28 +76,9 @@ class PurePursuit(object):
             b = x1 - x0
             c = x0*y1 - x1*y0
             #@Fritz's that calcualte the intersection of circle and line, given ax + by = c and circle at rx, ry with radius r
-<<<<<<< HEAD
-            # convert line to slope intercept form, and then vectorize it
-            mb = np.array([-a/b,c/b])
-            p1 = np.array([x0,y0])
-            p2 = np.array([x1,y1])
-            v = (p2-p1)/np.linalg.norm(p2-p1) #Unit Norm
-            # q_ = variables for quadratic equation for finding points on circ
-            qa = v.dot(v)
-            qb = 2*v.dot(p1-Q)
-            qc = p1.dot(p1) + Q.dot(Q) - 2*p1.dot(Q) - radius**2
-
-            disc = b**2-4*a*c # If negative, line doesn't intersect circle
-            t = np.array([(-b+np.sqrt(disc))/(2*a),(-b-np.sqrt(disc))/(2*a)])
-            # if either of the t's are outside of (0,1), line segment doesn't touch circle
-            intersectpoints = np.array([p1+t[0]*v,p1+t[1]*v]) # Np array of both intersect points
-            intersectx = intersectpoints[0][0] # arbitrarily picks first intersect point, may need to be changed
-            intersecty = intersectpoints[0][1]
-=======
 
             intersectx = 0
             intersecty = 0
->>>>>>> 6e5c3495418616bb1d8b377f6e6a069dc3a93015
 
             if(intersectx >= x0 and intersectx <= x1):
                 found = True
