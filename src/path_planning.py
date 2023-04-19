@@ -35,6 +35,8 @@ class PathPlan(object):
         self.map_cols = None
         self.map_origin = None
         self.current_pos = None
+        self.car_length = 0.35
+        self.car_box_length = None
 
         rospy.loginfo("planning initialized")
 
@@ -51,13 +53,18 @@ class PathPlan(object):
 
     def map_cb(self, msg): ######
         self.map_resolution = msg.info.resolution
-        self.map_orientation = msg.info.origin.orientation #quaternion
+        q = msg.info.origin.orientation
+        roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
+        self.map_orientation = th 
         self.map_origin = msg.info.origin.position
+
+        rospy.loginfo(self.map_origin)
 
         
         #discretize map 
         self.map_rows = msg.info.height
         self.map_cols = msg.info.width
+        self.car_box_length = int(self.car_length/self.map_resolution)
         map = np.array(msg.data).reshape((self.map_rows, self.map_cols)) #rows, cols
         self.map_grid = np.where(np.logical_and(0 <= map, map < 0.5), map, 1) #set to 1 if negative or greater than 0.5 aka occupied or unknown
        
@@ -82,7 +89,6 @@ class PathPlan(object):
 
         path = self.a_star(start_point, end_point, map)
         if path:
-            rospy.loginfo(path)
             self.trajectory.points  = path
 
         # publish trajectory
@@ -99,8 +105,29 @@ class PathPlan(object):
 
     def dist_heuristic(self, goal, next):
         dist = np.sqrt((goal[0]-next[0])**2 + (goal[1]-next[1])**2)
-        rospy.loginfo(dist)
         return dist  
+    
+    def world_to_map_frame(self, nx, ny):
+        norm_point = np.array([nx, ny, 1])
+        WorldToMapTransform = np.array([[np.cos(-1.0 * self.map_orientation), -1.0 * np.sin(-1.0 * self.map_orientation), -1.0 * self.map_origin.x],
+                                      [np.sin(-1.0 * self.map_orientation), np.cos(-1.0 * self.map_orientation), -1.0 * self.map_origin.y],
+                                      [0, 0, 1]])
+        
+        return(np.matmul(WorldToMapTransform, norm_point))
+    
+    def get_space_around_car(self, map_coords):
+        map_x = int(map_coords[0]/self.map_resolution)
+        map_y = int(map_coords[1]/self.map_resolution)
+        
+        car_slice = self.map_grid[map_y - self.car_box_length : map_y + self.car_box_length, map_x - self.car_box_length : map_x + self.car_box_length]
+        
+        total_occupancy = np.sum(car_slice, axis=None)
+        if total_occupancy != 0:
+            rospy.loginfo(map_x)
+            rospy.loginfo(map_y)
+            rospy.loginfo(car_slice)
+            rospy.loginfo(total_occupancy)
+        return False if total_occupancy != 0 else True 
 
     def neighbors(self, pt):
         results = set()
@@ -108,7 +135,8 @@ class PathPlan(object):
         for i in range(3):
             for j in range(3):
                 nx, ny = pt[0] + xv[i,j], pt[1] + yv[i,j] #indexing confusion
-                if self.map_grid[int(nx)][int(ny)] == 0:
+                map_coords = self.world_to_map_frame(nx, ny)
+                if self.get_space_around_car(map_coords):
                     results.add((nx, ny))
         return results
 

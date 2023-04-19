@@ -35,7 +35,7 @@ class PurePursuit(object):
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
 
-    def get_coordinate_arrray(self, poses):
+    def get_coordinate_array(self, poses):
         #Return an array of line segements where each segement represented as a 2x2 array of start and end coordinates
         return np.array([[pose.position.x, pose.position.y] for pose in poses])
     
