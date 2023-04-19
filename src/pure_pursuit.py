@@ -66,18 +66,19 @@ class PurePursuit(object):
         #assume the index is the index of the line segment that the closest point lines on
 
         for i in range(index, self.n - 1):
-            x0 = self.trajectory.points[i][0]
-            y0 = self.trajectory.points[i][1]
-            x1 = self.trajectory.points[i + 1][0]
-            y1 = self.trajectory.points[i + 1][1]
+            x0 = self.trajectory[i][0]
+            y0 = self.trajectory[i][1]
+            x1 = self.trajectory[i + 1][0]
+            y1 = self.trajectory[i + 1][1]
 
             #ax + by = c
             a = y1 - y0
             b = x1 - x0
             c = x0*y1 - x1*y0
             #@Fritz's that calcualte the intersection of circle and line, given ax + by = c and circle at rx, ry with radius r
-            # convert line to slope intercept form, and then vectorize it
 
+            # convert line to slope intercept form, and then vectorize it
+            mb = np.array([-a/b,c/b])
             p1 = np.array([x0,y0])
             p2 = np.array([x1,y1])
             v = (p2-p1)/np.linalg.norm(p2-p1) #Unit Norm
@@ -86,21 +87,37 @@ class PurePursuit(object):
             qb = 2*v.dot(p1-Q)
             qc = p1.dot(p1) + Q.dot(Q) - 2*p1.dot(Q) - radius**2
 
-            disc = qb**2-4*qa*qc # If negative, line doesn't intersect circle
-            t = np.array([(-b+np.sqrt(disc))/(2*qa),(-qb-np.sqrt(disc))/(2*qa)])
+            disc = b**2-4*a*c # If negative, line doesn't intersect circle
+            if(disc < 0):
+                continue
+            t = np.array([(-b+np.sqrt(disc))/(2*a),(-b-np.sqrt(disc))/(2*a)])
+            t = np.abs(t) # take abs value of t values to ensure direction along line segment is correct
             # if either of the t's are outside of (0,1), line segment doesn't touch circle
-            intersectpoints = np.array([p1+t[0]*v,p1+t[1]*v]) # Np array of both intersect points
-            intersectx = intersectpoints[0][0] # arbitrarily picks first intersect point, may need to be changed
-            intersecty = intersectpoints[0][1]
+            solutionindex = [0]
+            print(t)
+            if(t[0] > 1 or t[0] <= 0):
+                solutionindex = [1]
+                if(t[1] > 1 or t[1] < 0):
+                    continue
+            else:
+                if(t[1] > 1 or t[1] < 0):
+                    solutionindex = [0]
+                else:
+                    solutionindex = [0, 1]
 
-            intersectx = 0
-            intersecty = 0
+            intersect = np.array([[0, 0], [0, 0]])
+            for i in solutionindex:
+                intersectpoints = np.array([p1+t[i]*v,p1+t[i]*v]) # Np array of both intersect points
+                print(intersectpoints)
+                self.intersectx = intersectpoints[i][0] # arbitrarily picks first intersect point, may need to be changed
+                self.intersecty = intersectpoints[i][1]
 
-            if(intersectx >= x0 and intersectx <= x1):
-                found = True
-                break
+                if(self.intersectx >= x0 and self.intersectx <= x1):
+                    return (self.intersectx, self.intersecty)
+                    found = True
+                    break
         if(found):
-            return (intersectx, intersecty)
+            return (self.intersectx, self.intersecty)
         else:
             raise Exception("no intersection found :((")
         
