@@ -51,6 +51,7 @@ class PurePursuit(object):
         rospy.logerr(coordarr.shape)
         index = self.find_closest_segment_index(coordarr,self.current_location)
         goalpos = self.find_circle_intersection(index)
+        rospy.logerr(self.current_location)
         if(goalpos != (0,0)):
             self.drive_command(goalpos[0],goalpos[1])
 
@@ -147,18 +148,21 @@ class PurePursuit(object):
         pass
 
     def drive_command(self, goalx, goaly):
-        eta = np.pi / 2 - np.arctan(goaly / goalx) #might be np.atan2
+        if(goaly == 0):
+            eta = 0
+        else:
+            eta = np.arctan2(goaly, goalx)
         # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.time.now()
         AckermannDrive.header.frame_id = "base_link"
-        AckermannDrive.drive.speed = self.speed
         AckermannDrive.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
-        rospy.logerr(AckermannDrive.drive.steering_angle)
+        
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
         # AckermannDrive.drive.steering_angle = -1 * np.arctan(self.wheelbase_length * np.sin(eta) / (self.lookahead / 2  + lfw/np.cos(eta)))
         self.drive_pub.pub(AckermannDrive)
+
 
 if __name__=="__main__":
     rospy.init_node("pure_pursuit")
