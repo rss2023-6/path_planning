@@ -132,7 +132,7 @@ class PurePursuit(object):
         return 2 * goalx / self.lookahead**2
     
     def get_rotation_matrix(self, theta):
-        return np.array([[np.cos(theta), -1 * np.sin(theta)], [np.sin(theta), np.cos(theta)], [0, 0, 1, 0], [0, 0, 0, 1]])
+        return np.array([[np.cos(theta), -1 * np.sin(theta), 0, 0], [np.sin(theta), np.cos(theta), 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]])
     
     def transformtocarframe(self, goalpos, orientation, position):
         roll, pitch, theta = euler_from_quaternion([orientation.x, orientation.x, orientation.z, orientation.w])
@@ -152,19 +152,14 @@ class PurePursuit(object):
         rospy.logerr("x: {}, y: {}".format(self.x, self.y))
         rospy.logerr("goalx: {}, goaly: {}".format(goalx, goaly))
         rospy.logerr("a")
-        diffx = goalx - self.x
-        diffy = goaly - self.y
 
-        if(diffy == 0):
-            eta = 0
-        else:
-            eta = np.arctan2(goalx, goaly)
+        eta = np.arctan2(goaly, goalx)
         # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.Time.now()
         AckermannDrive.header.frame_id = "base_link"
         AckermannDrive.drive.speed = self.speed
-        AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
+        AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
