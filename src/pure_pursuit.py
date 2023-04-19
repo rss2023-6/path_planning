@@ -15,11 +15,11 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
-        self.odom_topic       = rospy.get_param("~odom_topic")
-        self.lookahead        = 0.2 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
+        self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
+        self.lookahead        = 0.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
         self.speed            = 1 #filled in for testing purposes, please update
         self.wheelbase_length = 0.24 #flilled in for testing purposes, please update
-        self.trajectory  = utils.LineTrajectory("/followed_trajectory")
+
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
@@ -28,8 +28,7 @@ class PurePursuit(object):
         self.x = self.current_location[0]
         self.y = self.current_location[1]
         self.theta = 0
-        self.n = len(self.trajectory.points)
-        rospy.logerr("initialized")
+        
 
     def odom_callback(self, msg):
         if(self.previous_odom_message != None):
@@ -37,21 +36,23 @@ class PurePursuit(object):
             self.current_location = np.array([curposition.x,curposition.y])
             self.x = curposition.x
             self.y = curposition.y
+            self.trajectory  = utils.LineTrajectory("/followed_trajectort")
+            self.n = len(self.trajectory.points)
+            rospy.logerr(self.trajectory.points)
         self.previous_odom_message = msg
 
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
         '''
         #print "Receiving new trajectory:", len(msg.poses), "points"
-        rospy.logerr("received")
+        
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
         coordarr = self.get_coordinate_array(msg.poses)
-        rospy.logerr(coordarr.shape)
         index = self.find_closest_segment_index(coordarr,self.current_location)
         goalpos = self.find_circle_intersection(index)
-        rospy.logerr(self.current_location)
+        #rospy.logerr(self.current_location)
         if(goalpos != (0,0)):
             self.drive_command(goalpos[0],goalpos[1])
 
@@ -90,7 +91,7 @@ class PurePursuit(object):
             y0 = self.trajectory[i][1]
             x1 = self.trajectory[i + 1][0]
             y1 = self.trajectory[i + 1][1]
-
+            rospy.logerr("seg: ({},{})->({},{})".format(x0,y0,x1,y1))
             #ax + by = c
             a = y1 - y0
             b = x1 - x0
@@ -108,6 +109,7 @@ class PurePursuit(object):
             qc = p1.dot(p1) + Q.dot(Q) - 2*p1.dot(Q) - radius**2
 
             disc = b**2-4*a*c # If negative, line doesn't intersect circle
+            rospy.logerr("disc: {}".format(disc))
             if(disc < 0):
                 continue
             t = np.array([(-b+np.sqrt(disc))/(2*a),(-b-np.sqrt(disc))/(2*a)])
