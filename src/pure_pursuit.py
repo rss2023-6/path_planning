@@ -156,6 +156,7 @@ class PurePursuit(object):
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.time.now()
         AckermannDrive.header.frame_id = "base_link"
+        AckermannDrive.drive.speed = self.speed
         AckermannDrive.drive.steering_angle = np.arctan(2 * self.wheelbase_length * np.sin(eta) / self.lookahead)
         
         #generalized sttering law by having a point ahead lecture slides
