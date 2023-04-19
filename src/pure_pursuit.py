@@ -92,16 +92,26 @@ class PurePursuit(object):
                 continue
             t = np.array([(-b+np.sqrt(disc))/(2*a),(-b-np.sqrt(disc))/(2*a)])
             # if either of the t's are outside of (0,1), line segment doesn't touch circle
+            solutionindex = [0]
             if(t[0] > 1 or t[0] < 0):
-                continue
-            intersectpoints = np.array([p1+t[0]*v,p1+t[1]*v]) # Np array of both intersect points
-            
-            intersectx = intersectpoints[0][0] # arbitrarily picks first intersect point, may need to be changed
-            intersecty = intersectpoints[0][1]
+                solutionindex = [1]
+                if(t[1] > 1 or t[1] < 0):
+                    continue
+            else:
+                if(t[1] > 1 or t[1] < 0):
+                    solutionindex = [0]
+                else:
+                    solutionindex = [0, 1]
 
-            if(intersectx >= x0 and intersectx <= x1):
-                found = True
-                break
+            for i in solutionindex:
+                intersectpoints = np.array([p1+t[solutionindex]*v,p1+t[solutionindex]*v]) # Np array of both intersect points
+            
+                intersectx = intersectpoints[solutionindex][0] # arbitrarily picks first intersect point, may need to be changed
+                intersecty = intersectpoints[solutionindex][1]
+
+                if(intersectx >= x0 and intersectx <= x1):
+                    found = True
+                    break
         if(found):
             return (intersectx, intersecty)
         else:
@@ -114,7 +124,10 @@ class PurePursuit(object):
         pass
 
     def drive_command(self, goalx, goaly):
-        eta = np.pi / 2 - np.arctan(goaly / goalx) #might be np.atan2
+        if(goaly == 0):
+            eta = 0
+        else:
+            eta = np.pi / 2 - np.arctan(goalx / goaly) #might be np.atan2
         # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.time.now()
