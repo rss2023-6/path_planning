@@ -127,7 +127,7 @@ class PurePursuit(object):
         if(goaly == 0):
             eta = 0
         else:
-            eta = np.pi / 2 - np.arctan(goalx / goaly) #might be np.atan2
+            eta = np.arctan2(goaly, goalx)
         # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.time.now()
