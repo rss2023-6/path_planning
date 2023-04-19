@@ -37,7 +37,8 @@ class PathPlan(object):
         self.current_pos = None
         self.car_length = 0.35
         self.car_box_length = None
-
+        self.search_step_size = 5
+        self.seen = set()
         rospy.loginfo("planning initialized")
 
     # def transformation_matrix(self, th):
@@ -48,23 +49,31 @@ class PathPlan(object):
     # def px_2_m(self, map_resolution, px):
     #     return px*float(map_resolution)*self.lidar_scale_to_map_scale
 
-    def m_2_px(self, m):
-        return m/(float(self.map_resolution)*self.lidar_scale_to_map_scale)
+    # def m_2_px(self, m):
+    #     return m/(float(self.map_resolution)*self.lidar_scale_to_map_scale)
 
     def map_cb(self, msg): ######
         self.map_resolution = msg.info.resolution
+        rospy.loginfo("map_resolution")
+        rospy.loginfo(self.map_resolution)
         q = msg.info.origin.orientation
         roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
+        rospy.loginfo("euler_from_quaternion")
+        rospy.loginfo(euler_from_quaternion([q.x, q.y, q.z, q.w]))
         self.map_orientation = th 
         self.map_origin = msg.info.origin.position
+        self.WorldToMapTransform = np.array([[np.cos(-self.map_orientation), -np.sin(-self.map_orientation), -self.map_origin.x],
+                                      [np.sin(-self.map_orientation), np.cos(-self.map_orientation), -self.map_origin.y],
+                                      [0, 0, 1]])
 
+        rospy.loginfo("self.map_origin")
         rospy.loginfo(self.map_origin)
 
         
         #discretize map 
         self.map_rows = msg.info.height
         self.map_cols = msg.info.width
-        self.car_box_length = int(self.car_length/self.map_resolution)
+        self.car_box_length = int(self.car_length/(self.map_resolution * 2))
         map = np.array(msg.data).reshape((self.map_rows, self.map_cols)) #rows, cols
         self.map_grid = np.where(np.logical_and(0 <= map, map < 0.5), map, 1) #set to 1 if negative or greater than 0.5 aka occupied or unknown
        
@@ -76,20 +85,46 @@ class PathPlan(object):
         self.initialized = True 
 
     def goal_cb(self, msg): ######
-        start_pt = self.current_pos
-        goal_pt = msg.pose.position.x, msg.pose.position.y
+        if self.initialized:
+            start_pt = self.current_pos
+            goal_pt = msg.pose.position.x, msg.pose.position.y
 
-        start_px = tuple(start_pt) #self.m_2_px(start_pt)
-        end_px = tuple(goal_pt) #self.m_2_px(goal_pt)
+            # rospy.loginfo("start and end in world")
+            # rospy.loginfo(start_pt)
+            # rospy.loginfo(goal_pt)
 
-        self.plan_path(start_px, end_px, self.map_grid)
+            start_px = self.world_to_map_frame(start_pt[0],start_pt[1])#change to map frame 
+            end_px = self.world_to_map_frame(goal_pt[0],goal_pt[1])  #change to map frame 
+
+            # rospy.loginfo("start and end in map")
+            # rospy.loginfo(start_px)
+            # rospy.loginfo(end_px)
+
+            # rospy.loginfo("back to world")
+            # rospy.loginfo(self.map_to_world_frame(start_px[0],start_px[1]))
+            # rospy.loginfo(self.map_to_world_frame(end_px[0],end_px[1]))
+
+            self.plan_path(start_px, end_px, self.map_grid)
+        else:
+            rospy.loginfo("start_pt not init")
 
     def plan_path(self, start_point, end_point, map): ######
         ## CODE FOR PATH PLANNING ##
 
         path = self.a_star(start_point, end_point, map)
+
         if path:
-            self.trajectory.points  = path
+            #change map frame back to world frame 
+            # rospy.loginfo("path")
+            # rospy.loginfo(path)
+            
+            world_path = []
+            for tup in path:
+                world_path.append(self.map_to_world_frame(tup[0],tup[1]))
+            # rospy.loginfo("world_path")
+            # rospy.loginfo(world_path)
+
+            self.trajectory.points  = world_path
 
         # publish trajectory
         self.traj_pub.publish(self.trajectory.toPoseArray())
@@ -109,40 +144,46 @@ class PathPlan(object):
     
     def world_to_map_frame(self, nx, ny):
         norm_point = np.array([nx, ny, 1])
-        WorldToMapTransform = np.array([[np.cos(-1.0 * self.map_orientation), -1.0 * np.sin(-1.0 * self.map_orientation), -1.0 * self.map_origin.x],
-                                      [np.sin(-1.0 * self.map_orientation), np.cos(-1.0 * self.map_orientation), -1.0 * self.map_origin.y],
-                                      [0, 0, 1]])
-        
-        return(np.matmul(WorldToMapTransform, norm_point))
+        px_point = np.matmul(self.WorldToMapTransform, norm_point)/self.map_resolution
+        return (px_point[0], px_point[1])
+    
+    def map_to_world_frame(self, nx, ny):
+        norm_point = np.array([nx * self.map_resolution, ny * self.map_resolution, 1])
+        MapToWorldTransform = np.linalg.inv(self.WorldToMapTransform)
+        world_pt = np.matmul(MapToWorldTransform, norm_point)
+
+        return (world_pt[0], world_pt[1])
     
     def get_space_around_car(self, map_coords):
-        map_x = int(map_coords[0]/self.map_resolution)
-        map_y = int(map_coords[1]/self.map_resolution)
+        map_x = int(map_coords[0])
+        map_y = int(map_coords[1])
         
         car_slice = self.map_grid[map_y - self.car_box_length : map_y + self.car_box_length, map_x - self.car_box_length : map_x + self.car_box_length]
         
         total_occupancy = np.sum(car_slice, axis=None)
         if total_occupancy != 0:
-            rospy.loginfo(map_x)
-            rospy.loginfo(map_y)
-            rospy.loginfo(car_slice)
+            # rospy.loginfo(map_x)
+            # rospy.loginfo(map_y)
+            # rospy.loginfo(car_slice)
             rospy.loginfo(total_occupancy)
         return False if total_occupancy != 0 else True 
 
     def neighbors(self, pt):
         results = set()
-        xv, yv = np.meshgrid([-1, 0, 1], [-1, 0, 1], indexing='ij')
+        xv, yv = np.meshgrid([-self.search_step_size, 0, self.search_step_size], [-self.search_step_size, 0, self.search_step_size], indexing='ij')
         for i in range(3):
             for j in range(3):
                 nx, ny = pt[0] + xv[i,j], pt[1] + yv[i,j] #indexing confusion
-                map_coords = self.world_to_map_frame(nx, ny)
-                if self.get_space_around_car(map_coords):
-                    results.add((nx, ny))
+                map_coords = (nx, ny)
+                if (nx, ny) not in self.seen:
+                    self.seen.add((nx, ny))
+                    if self.get_space_around_car(map_coords):
+                        results.add((nx, ny))
         return results
 
     def a_star(self, init, goal, map):
         frontier = PriorityQueue() 
-        frontier.put((0, init))
+        frontier.put((self.dist_heuristic(goal, init), init))
 
         came_from = dict()
         cost_so_far = dict()
@@ -152,9 +193,13 @@ class PathPlan(object):
 
         while not frontier.empty():
             
+            # rospy.loginfo(frontier.get())
             current = frontier.get()[1]
 
-            if self.dist_heuristic(current, goal) < 1: #close to end point
+            if current in came_from.keys():
+                pass
+
+            if self.dist_heuristic(current, goal) < self.search_step_size: #close to end point
                 #get path 
                 path = [current]
                 node = current
@@ -171,6 +216,7 @@ class PathPlan(object):
                     frontier.put((priority, next))
                     came_from[next] = current  
 
+        rospy.loginfo("no path found")
         return None #"path not found"  
 
 
