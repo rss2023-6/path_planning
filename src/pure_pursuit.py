@@ -19,12 +19,12 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = 4.0 #filled in for testing purposes, please update
+        self.speed            = 1.0 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        # self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
-        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+        # self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.cterr_pub = rospy.Publisher("/crosstrackerror", Float64,queue_size=1)
         self.goal_point_pub = rospy.Publisher('/pure_pursuit_goal', Marker, queue_size = 1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
@@ -33,7 +33,7 @@ class PurePursuit(object):
         self.y = self.current_location[1]
         self.theta = 0
         self.brake = False # Boolean condition to determine whether to stop
-        self.thresh = 0.6 # distance from final path point at which car will stop
+        self.thresh = self.speed # distance from final path point at which car will stop
         
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -96,11 +96,24 @@ class PurePursuit(object):
         return np.argmin(closest_points)
 
     def find_circle_intersection(self, index):
-        radius = 3.3425
-        #3.340 was good but slightly drifting near the column
-        #3.3425 went out near the column
-        #3.3437
-        #3.345 was oversmooth
+        if self.speed == 4:
+            radius = 3.3425
+            #3.340 was good but slightly drifting near the column
+            #3.3425 went out near the column
+            #3.3437
+            #3.345 was oversmooth
+        if self.speed == 1:
+            radius = 0.84
+            #0.845 was too smooth
+            #0.835 worked pretty well but drifted on Penny's computer
+        if self.speed == 2:
+            radius = 1.67
+            #1.67 had a lot of odometry drifting
+        if self.speed == 3:
+            radius = 2.50
+        else:
+            radius = 3.3425/4.0 * self.speed
+
         rx = self.x
         ry = self.y
         Q = np.array([rx,ry])
