@@ -7,11 +7,11 @@ import utils
 import tf
 
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
-from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PoseArray, PoseStamped, Pose, Point
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, ColorRGBA
 
 class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -19,12 +19,14 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = 4 #filled in for testing purposes, please update
+        self.speed            = 4.0 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+        # self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.cterr_pub = rospy.Publisher("/crosstrackerror", Float64,queue_size=1)
+        self.goal_point_pub = rospy.Publisher('/pure_pursuit_goal', Marker, queue_size = 1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
         self.current_location = np.array([0,0])
         self.x = self.current_location[0]
@@ -94,7 +96,11 @@ class PurePursuit(object):
         return np.argmin(closest_points)
 
     def find_circle_intersection(self, index):
-        radius = 3.340
+        radius = 3.3425
+        #3.340 was good but slightly drifting near the column
+        #3.3425 went out near the column
+        #3.3437
+        #3.345 was oversmooth
         rx = self.x
         ry = self.y
         Q = np.array([rx,ry])
@@ -138,14 +144,14 @@ class PurePursuit(object):
             qa = np.dot(v, v)
             qb = 2.0 * np.dot(v, p1 - Q)
             qc = np.dot(p1, p1) + np.dot(Q, Q) - 2.0 * np.dot(p1, Q) - radius**2
-            print("seg: ({},{})->({},{})".format(x0,y0,x1,y1))
+            # print("seg: ({},{})->({},{})".format(x0,y0,x1,y1))
 
             disc = qb**2.0-4.0*qa*qc # If negative, line doesn't intersect circle
-            print("disc: {}".format(disc))
+            # print("disc: {}".format(disc))
             if(disc < 0):
                 continue
             t = np.array([(-1.0 * qb+np.sqrt(disc))/(2.0*qa),(-1.0 * qb-np.sqrt(disc))/(2.0*qa)])
-            print(t)
+            # print(t)
             # take abs value of t values to ensure direction along line segment is correct
             # if either of the t's are outside of (0,1), line segment doesn't touch circle
             solutionpoints = []
@@ -158,7 +164,25 @@ class PurePursuit(object):
               solutionpoints.append((p[0], p[1]))
               found = True
             if(found):
-                return solutionpoints[-1]
+                answer = solutionpoints[-1]
+                # p = Pose()
+                # point = Point()
+                # m = Marker()
+                # m.header.frame_id = "/map"
+                # c = ColorRGBA()
+                # c.r = 255
+                # c.g = 0
+                # c.b = 0
+                # m.type = 2
+                # m.color = c
+                # map_goal = self.world_to_pixel_frame(answer[0], answer[1])
+                # point.x = map_goal[0]
+                # point.y = map_goal[1]
+                # point.z = 0
+                # p.position = point
+                # m.pose = p
+                # self.goal_point_pub.publish(m)
+                return answer
         return (0, 0)
 
     def get_curvature(self, goalx, goaly):
@@ -195,8 +219,8 @@ class PurePursuit(object):
             rospy.logerr("STOPPING)")
             AckermannDrive.drive.speed = 0
             AckermannDrive.drive.steering_angle = 0
-
         else:
+            rospy.logerr("sending drive signal")
             AckermannDrive.drive.speed = self.speed
             AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
