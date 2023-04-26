@@ -19,11 +19,12 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = 4 #filled in for testing purposes, please update
+        self.speed            = 4.0 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+        # self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+        self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
         self.cterr_pub = rospy.Publisher("/crosstrackerror", Float64,queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
         self.current_location = np.array([0,0])
@@ -195,8 +196,8 @@ class PurePursuit(object):
             rospy.logerr("STOPPING)")
             AckermannDrive.drive.speed = 0
             AckermannDrive.drive.steering_angle = 0
-
         else:
+            rospy.logerr("sending drive signal")
             AckermannDrive.drive.speed = self.speed
             AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
