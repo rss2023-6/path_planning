@@ -199,6 +199,7 @@ class PathPlan(object):
         pixx=mapx/self.resolution
         pixy=mapy/self.resolution
         return (int(pixx), int(pixy))
+    
     def pixel_to_world_frame(self, nx, ny):
         pixx=-nx*self.resolution
         pixy=-ny*self.resolution
