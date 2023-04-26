@@ -18,7 +18,7 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = 1 #filled in for testing purposes, please update
+        self.speed            = 4 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
@@ -85,7 +85,7 @@ class PurePursuit(object):
         return np.argmin(closest_points)
 
     def find_circle_intersection(self, index):
-        radius = self.speed * 0.6
+        radius = 3.340
         rx = self.x
         ry = self.y
         Q = np.array([rx,ry])
@@ -140,18 +140,18 @@ class PurePursuit(object):
         trans_matrix = np.array([[1, 0, 0, position.x], [0, 1, 0, position.y], [0, 0, 1, position.z], [0, 0, 0, 1]])
         
         combined_trans = np.linalg.inv( np.matmul(trans_matrix, rotation_matrix))
-        rospy.loginfo(combined_trans)
+        # rospy.loginfo(combined_trans)
 
         goal = np.array([[goalpos[0]], [goalpos[1]], [0], [1]])
         final_goal = np.matmul(combined_trans, goal)
-        rospy.logerr("FINAL GOAL")
-        rospy.logerr(final_goal)
+        # rospy.logerr("FINAL GOAL")
+        # rospy.logerr(final_goal)
         return final_goal
     
     def drive_command(self, goalx, goaly):
-        rospy.logerr("x: {}, y: {}".format(self.x, self.y))
-        rospy.logerr("goalx: {}, goaly: {}".format(goalx, goaly))
-        rospy.logerr("a")
+        # rospy.logerr("x: {}, y: {}".format(self.x, self.y))
+        # rospy.logerr("goalx: {}, goaly: {}".format(goalx, goaly))
+        # rospy.logerr("a")
 
         eta = np.arctan2(goaly, goalx)
         # R = self.lookahead / (2 * np.sin(eta))
