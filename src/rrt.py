@@ -46,8 +46,8 @@ class PathPlan(object):
         # dilated_img = dilation(img_map, disk(self.dilation_disk))
         # map = np.true_divide(dilated_img, 255.0) * 100.0
         self.map = ndimage.binary_dilation(self.map, iterations = self.ndimage_dilation)
-        rospy.loginfo(self.map.shape)
-        rospy.loginfo("dilation true")
+        # rospy.loginfo(self.map.shape)
+        # rospy.loginfo("dilation true")
 
         imsave("/home/racecar/racecar_ws/src/path_planning/maps/occupancy.png", (np.true_divide(self.map, 100.0) * 255.0).T)
         #self.map = np.array(msg.data).reshape(msg.info.height, msg.info.width)
@@ -57,8 +57,8 @@ class PathPlan(object):
         self.resolution = msg.info.resolution
         self.map_orientation = msg.info.origin.orientation
         self.map_origin = msg.info.origin.position
-        rospy.loginfo(self.map_origin)
-        rospy.loginfo("Map received")
+        # rospy.loginfo(self.map_origin)
+        # rospy.loginfo("Map received")
 
     def odom_cb(self, msg):
         if self.map_orientation is None:
@@ -72,9 +72,9 @@ class PathPlan(object):
         
         self.end_point = self.world_to_pixel_frame(msg.pose.position.x, msg.pose.position.y)
         self.end_point = (abs(self.end_point[0]), abs(self.end_point[1]))
-        rospy.loginfo(self.end_point)
-        rospy.loginfo(self.map[self.end_point[1], self.end_point[0]])
-        rospy.loginfo("Goal received")
+        # rospy.loginfo(self.end_point)
+        # rospy.loginfo(self.map[self.end_point[1], self.end_point[0]])
+        # rospy.loginfo("Goal received")
         self.plan_path(self.start_point, self.end_point, self.map)
         rospy.loginfo("Path Planned")
 
@@ -88,7 +88,7 @@ class PathPlan(object):
             random_index = zero_indices[np.random.randint(len(zero_indices))]
             testpoint = tuple(random_index)
             testpoint = (testpoint[1], testpoint[0])
-            rospy.loginfo(testpoint)
+            # rospy.loginfo(testpoint)
             #rospy.loginfo(self.map[testpoint[0], testpoint[1]])
             #rospy.loginfo(self.distance(testpoint, points[-1].location))
             #testpoint = (random.randint(0,self.bounds[0]-1), random.randint(0,self.bounds[1]-1))
