@@ -11,6 +11,7 @@ from geometry_msgs.msg import PoseArray, PoseStamped
 from visualization_msgs.msg import Marker
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
+from std_msgs.msg import Float64
 
 class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
@@ -23,11 +24,14 @@ class PurePursuit(object):
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
         self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        self.cterr_pub = rospy.Publisher("/crosstrackerror", Float64,queue_size=1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
         self.current_location = np.array([0,0])
         self.x = self.current_location[0]
         self.y = self.current_location[1]
         self.theta = 0
+        self.brake = False # Boolean condition to determine whether to stop
+        self.thresh = 0.6 # distance from final path point at which car will stop
         
     def trajectory_callback(self, msg):
         ''' Clears the currently followed trajectory, and loads the new one from the message
@@ -51,6 +55,11 @@ class PurePursuit(object):
         coordarr = self.get_coordinate_array2(poses)
         index = self.find_closest_segment_index(coordarr,self.current_location)
         goalpos = self.find_circle_intersection(index)
+
+        if (np.linalg.norm(self.current_location - np.array(poses[-1])) < self.thresh): # Car stop condition
+            self.brake = True
+        else:
+            self.brake = False
 
         if(goalpos != (0, 0)):
             goalpos = self.transformtocarframe(goalpos, curorientation, curposition)
@@ -91,6 +100,30 @@ class PurePursuit(object):
         Q = np.array([rx,ry])
         found = False
         #assume the index is the index of the line segment that the closest point lines on
+        #Compute cross track error to closest line segment
+        def cte(index): # distance from current location to closest line segment
+            x1 = self.trajectory.points[index][0]
+            y1 = self.trajectory.points[index][1]
+            x2 = self.trajectory.points[index+1][0]
+            y2 = self.trajectory.points[index+1][1]
+            px = x2 - x1
+            py = y2 - y1
+            norm = px*px + py*py
+            u = ((self.current_location[0]-x1)*px + (self.current_location[1]-y1)*py)/float(norm)
+            if u>1:
+                u=1
+            elif u<0:
+                u=0
+            x = x1 + u*px
+            y = y1 + u*px
+
+            dx = x - self.current_location[0]
+            dy = y - self.current_location[1]
+            dist = (dx*dx + dy*dy)**.5
+            return dist
+        cterr = Float64()
+        cterr.data = cte(index)
+        self.cterr_pub.publish(cterr)
 
         for i in range(index, self.n - 1):
             x0 = self.trajectory.points[i][0]
@@ -144,22 +177,28 @@ class PurePursuit(object):
 
         goal = np.array([[goalpos[0]], [goalpos[1]], [0], [1]])
         final_goal = np.matmul(combined_trans, goal)
-        # rospy.logerr("FINAL GOAL")
-        # rospy.logerr(final_goal)
+        #rospy.logerr("FINAL GOAL")
+        #rospy.logerr(final_goal)
         return final_goal
     
     def drive_command(self, goalx, goaly):
-        # rospy.logerr("x: {}, y: {}".format(self.x, self.y))
-        # rospy.logerr("goalx: {}, goaly: {}".format(goalx, goaly))
-        # rospy.logerr("a")
+        #rospy.logerr("x: {}, y: {}".format(self.x, self.y))
+        #rospy.logerr("goalx: {}, goaly: {}".format(goalx, goaly))
+        #ospy.logerr("a")
 
         eta = np.arctan2(goaly, goalx)
         # R = self.lookahead / (2 * np.sin(eta))
         AckermannDrive = AckermannDriveStamped()
         AckermannDrive.header.stamp = rospy.Time.now()
         AckermannDrive.header.frame_id = "base_link"
-        AckermannDrive.drive.speed = self.speed
-        AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
+        if (self.brake):
+            rospy.logerr("STOPPING)")
+            AckermannDrive.drive.speed = 0
+            AckermannDrive.drive.steering_angle = 0
+
+        else:
+            AckermannDrive.drive.speed = self.speed
+            AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
