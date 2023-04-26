@@ -4,7 +4,7 @@ import rospy
 import numpy as np
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from nav_msgs.msg import Odometry, OccupancyGrid
-from tf.transformations import euler_from_quaternion
+from tf.transformations import euler_from_quaternion, rotation_matrix, concatenate_matrices
 from scipy import ndimage
 from scipy.misc import imread, imsave
 import rospkg
@@ -26,8 +26,7 @@ class PathPlan(object):
         self.resolution = None
         self.map_orientation = None
         self.map_origin = None
-        self.WorldToMapTransform = None
-        self.ndimage_dilation = 3 #ndimage, 15
+        self.ndimage_dilation = 10 #ndimage, 15
 
         self.odom_topic = "/odom"
         self.map_sub = rospy.Subscriber("/map", OccupancyGrid, self.map_cb)
@@ -36,7 +35,6 @@ class PathPlan(object):
         self.traj_pub = rospy.Publisher("/trajectory/current", PoseArray, queue_size=10)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_cb)
         self.test_pub = rospy.Publisher("/test", Pose, queue_size=10)
-        
 
 
     def map_cb(self, msg):
@@ -48,6 +46,7 @@ class PathPlan(object):
         # dilated_img = dilation(img_map, disk(self.dilation_disk))
         # map = np.true_divide(dilated_img, 255.0) * 100.0
         self.map = ndimage.binary_dilation(self.map, iterations = self.ndimage_dilation)
+        rospy.loginfo(self.map.shape)
         rospy.loginfo("dilation true")
 
         imsave("/home/racecar/racecar_ws/src/path_planning/maps/occupancy.png", (np.true_divide(self.map, 100.0) * 255.0).T)
@@ -56,25 +55,25 @@ class PathPlan(object):
         self.bounds = (msg.info.width, msg.info.height)
         self.radius = int(.5/msg.info.resolution)
         self.resolution = msg.info.resolution
-
-        roll, pitch, th = euler_from_quaternion([msg.info.origin.orientation.w, msg.info.origin.orientation.x, msg.info.origin.orientation.y, msg.info.origin.orientation.z])
-        self.map_orientation = th
+        self.map_orientation = msg.info.origin.orientation
         self.map_origin = msg.info.origin.position
-        self.WorldToMapTransform = np.array([[np.cos(-1.*self.map_orientation), np.sin(-1.*self.map_orientation), -1.*self.map_origin.x],
-                                      [np.sin(-1.*self.map_orientation), np.cos(-1.*self.map_orientation), -1.*self.map_origin.y],
-                                      [0, 0, 1]])
-
+        rospy.loginfo(self.map_origin)
         rospy.loginfo("Map received")
 
     def odom_cb(self, msg):
-        if self.WorldToMapTransform is None:
+        if self.map_orientation is None:
             return
-        self.start_point = self.transform_world_to_map((msg.pose.pose.position.x, msg.pose.pose.position.y))
-        #rospy.loginfo("Odom received")
+        self.start_point = self.world_to_pixel_frame(msg.pose.pose.position.x, msg.pose.pose.position.y)
+        self.start_point = (abs(self.start_point[0]), abs(self.start_point[1]))
+        #rospy.loginfo((msg.pose.pose.position.x, msg.pose.pose.position.y))
+        #rospy.loginfo(self.start_point)
 
     def goal_cb(self, msg):
         
-        self.end_point = self.transform_world_to_map((msg.pose.position.x, msg.pose.position.y))
+        self.end_point = self.world_to_pixel_frame(msg.pose.position.x, msg.pose.position.y)
+        self.end_point = (abs(self.end_point[0]), abs(self.end_point[1]))
+        rospy.loginfo(self.end_point)
+        rospy.loginfo(self.map[self.end_point[1], self.end_point[0]])
         rospy.loginfo("Goal received")
         self.plan_path(self.start_point, self.end_point, self.map)
         rospy.loginfo("Path Planned")
@@ -82,17 +81,17 @@ class PathPlan(object):
     def plan_path(self, start_point, end_point, map):
         '''Implement rrt'''
         ## CODE FOR PATH PLANNING ##
-        rospy.loginfo(start_point)
         start_node = Node(start_point, None, 0)
         points = [start_node]
-        zero_indices = np.argwhere(map == 0)
+        zero_indices = np.argwhere(map == False)
         while True:
             random_index = zero_indices[np.random.randint(len(zero_indices))]
-            #testpoint = tuple(random_index)
-            #rospy.loginfo(distance(testpoint, points[-1].location))
-            testpoint = (random.randint(0,self.bounds[0]-1), random.randint(0,self.bounds[1]-1))
-
-
+            testpoint = tuple(random_index)
+            testpoint = (testpoint[1], testpoint[0])
+            rospy.loginfo(testpoint)
+            #rospy.loginfo(self.map[testpoint[0], testpoint[1]])
+            #rospy.loginfo(self.distance(testpoint, points[-1].location))
+            #testpoint = (random.randint(0,self.bounds[0]-1), random.randint(0,self.bounds[1]-1))
             closestdist = np.inf
             closestpoint = (0,0)
             for index, node in enumerate(points):
@@ -117,30 +116,28 @@ class PathPlan(object):
         nodepath.reverse()
         nodepath = nodepath[1:]
 
-        nodepathmod = []
-
+########## code for pruning path ##########
         path = []
-        rospy.loginfo(len(nodepath))
-        nodeindex = 0
-        while nodeindex < len(nodepath)-1:
-            for nodeindex2 in range(nodeindex, len(nodepath)):
-                if self.collisioncheck(self.map, nodepath[nodeindex].location, nodepath[nodeindex2].location, self.radius):
-                    rospy.loginfo("appending")
-                    nodepathmod.append(nodepath[nodeindex2-1])
-                    nodeindex = nodeindex2-1
+        
+        current = 0
+        nodepathmod = [nodepath[current]]
+        while current != len(nodepath)-1:
+            for i in range(current+1, len(nodepath)):
+                if self.collisioncheck(self.map, nodepath[current].location, nodepath[i].location, self.radius):
+                    current = i-1
                     break
-                elif nodeindex2 == len(nodepath)-1:
-                    nodepathmod.append(nodepath[nodeindex2])
-                    nodeindex = nodeindex2
+                elif i == len(nodepath)-1:
+                    current = i
                     break
                 else:
-                    rospy.loginfo(nodeindex2)
-                    nodeindex = nodeindex2
+                    continue
+            nodepathmod.append(nodepath[current])
+            
+##########  end of code for pruning path ##########   
 
-        for node in nodepath:
-            path.append(self.transform_map_to_world((node.location[0], node.location[1])))
-       
-        rospy.loginfo(path)
+        for node in nodepathmod:
+            path.append(self.pixel_to_world_frame(node.location[0], node.location[1]))
+    
         self.trajectory.points = path
 
     
@@ -183,7 +180,10 @@ class PathPlan(object):
 
         for point in line_points:
             x, y = point
-            if map[y][x] > 0:
+            if x < 0 or y < 0 or x >= map.shape[1] or y >= map.shape[0]:
+                #rospy.loginfo("out of bounds")
+                return True
+            if map[y][x] == True:
                 rospy.loginfo("collision")
                 return True
 
@@ -193,17 +193,60 @@ class PathPlan(object):
     def dist_from_line(self, p, m, b):
         return abs(-m*p[0]+p[1]+b)/((m**2+1)**.5)
     
-    def transform_world_to_map(self, point):
-        norm_point = np.array([point[0], point[1], 1])
-
-        transformed = np.matmul(self.WorldToMapTransform, norm_point)/self.resolution
-        return (int(transformed[0]), int(transformed[1]))
+    def world_to_pixel_frame(self, nx, ny):
+        mapx=nx-self.map_origin.x
+        mapy=ny-self.map_origin.y
+        pixx=mapx/self.resolution
+        pixy=mapy/self.resolution
+        return (int(pixx), int(pixy))
+    def pixel_to_world_frame(self, nx, ny):
+        pixx=-nx*self.resolution
+        pixy=-ny*self.resolution
+        mapx=pixx+self.map_origin.x
+        mapy=pixy+self.map_origin.y
+        return (mapx, mapy)
     
-    def transform_map_to_world(self, point):
-        norm_point = np.array([point[0]*self.resolution, point[1]*self.resolution, 1])
-        transformed =  np.matmul(np.linalg.inv(self.WorldToMapTransform), norm_point)
-        return (transformed[0], transformed[1])
-
+    def quaternion_rotation_matrix(self, Q):
+        """
+        Covert a quaternion into a full three-dimensional rotation matrix.
+    
+        Input
+        :param Q: A 4 element array representing the quaternion (q0,q1,q2,q3) 
+    
+        Output
+        :return: A 3x3 element matrix representing the full 3D rotation matrix. 
+                This rotation matrix converts a point in the local reference 
+                frame to a point in the global reference frame.
+        """
+        # Extract the values from Q
+        q0 = Q[0]
+        q1 = Q[1]
+        q2 = Q[2]
+        q3 = Q[3]
+        
+        # First row of the rotation matrix
+        r00 = 2 * (q0 * q0 + q1 * q1) - 1
+        r01 = 2 * (q1 * q2 - q0 * q3)
+        r02 = 2 * (q1 * q3 + q0 * q2)
+        
+        # Second row of the rotation matrix
+        r10 = 2 * (q1 * q2 + q0 * q3)
+        r11 = 2 * (q0 * q0 + q2 * q2) - 1
+        r12 = 2 * (q2 * q3 - q0 * q1)
+        
+        # Third row of the rotation matrix
+        r20 = 2 * (q1 * q3 - q0 * q2)
+        r21 = 2 * (q2 * q3 + q0 * q1)
+        r22 = 2 * (q0 * q0 + q3 * q3) - 1
+        
+        # 3x3 rotation matrix
+        rot_matrix = np.array([[r00, r01, r02],
+                            [r10, r11, r12],
+                            [r20, r21, r22]])
+                                
+        return rot_matrix
+    
+    
 class Node:
     def __init__(self, location, parent, cost):
         self.location = location
