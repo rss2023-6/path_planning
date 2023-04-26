@@ -38,9 +38,9 @@ class PathPlan(object):
         self.map_cols = None
         self.map_origin = None
         self.current_pos = None
-        self.car_length = 0.5 #0.35
+        self.car_length = 0.35 #0.35
         self.car_box_length = None
-        self.search_step_size = 5
+        self.search_step_size = 7
         self.seen = set()
 
         self.init_time = None #rospy.get_rostime()
@@ -78,25 +78,27 @@ class PathPlan(object):
     def odom_cb(self, msg): ######
         #q = msg.pose.pose.orientation #not sure if we need this 
         #roll, pitch, th = euler_from_quaternion([q.x, q.y, q.z, q.w])
+       
         self.current_pos = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y]) #np.array([-18.0, -9.0])#
         self.initialized = True 
 
     def goal_cb(self, msg): ######
         if self.initialized:
+            self.seen = set()
             start_pt = self.current_pos
             goal_pt = msg.pose.position.x, msg.pose.position.y #(6,18) #
             self.init_time = rospy.get_rostime()
 
-            # rospy.loginfo("start and end in world")
-            # rospy.loginfo(start_pt)
-            # rospy.loginfo(goal_pt)
+            rospy.loginfo("start and end in world")
+            rospy.loginfo(start_pt)
+            rospy.loginfo(goal_pt)
 
             start_px = (self.world_to_pixel_frame(start_pt[0],start_pt[1]))#change to map frame 
             end_px = (self.world_to_pixel_frame(goal_pt[0],goal_pt[1]))  #change to map frame 
 
-            # rospy.loginfo("start and end in map")
-            # rospy.loginfo(start_px)
-            # rospy.loginfo(end_px)
+            rospy.loginfo("start and end in map")
+            rospy.loginfo(start_px)
+            rospy.loginfo(end_px)
 
             # rospy.loginfo("back to world")
             # rospy.loginfo(self.map_to_world_frame(start_px[0],start_px[1]))
@@ -194,11 +196,11 @@ class PathPlan(object):
         
         total_occupancy = np.sum(car_slice, axis=None)
         # rospy.loginfo(total_occupancy)
-        if total_occupancy != 0:
+        #if total_occupancy != 0:
             # rospy.loginfo(map_x)
             # rospy.loginfo(map_y)
             # rospy.loginfo(car_slice)
-            rospy.loginfo(total_occupancy)
+            #rospy.loginfo(total_occupancy)
         return False if total_occupancy != 0 else True 
 
     def neighbors(self, pt):
