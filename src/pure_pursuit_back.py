@@ -20,12 +20,21 @@ class PurePursuit(object):
     def __init__(self):
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = 3.0 #filled in for testing purposes, please update
+        self.speed            = -0.4 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
-        self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
-        self.drive_pub2 = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        
+        self.in_sim = True
+        if not self.in_sim:
+            rospy.logerr("testing on car!")
+            self.drive_pub = rospy.Publisher("/vesc/ackermann_cmd_mux/input/navigation", AckermannDriveStamped, queue_size=1)
+            self.drive_pub2 = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+            self.teleop_subscriber = rospy.Subscriber("/vesc/joy", Joy, self.tcb, queue_size=1)    
+        else:
+            rospy.logerr("testing in sim!")
+            self.drive_pub = rospy.Publisher("/drive", AckermannDriveStamped, queue_size=1)
+        
         self.cterr_pub = rospy.Publisher("/crosstrackerror", Float64,queue_size=1)
         self.goal_point_pub = rospy.Publisher('/pure_pursuit_goal', Marker, queue_size = 1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
@@ -35,8 +44,9 @@ class PurePursuit(object):
         self.theta = 0
         self.brake = False # Boolean condition to determine whether to stop
         self.thresh = self.speed # distance from final path point at which car will stop
-        self.teleop_subscriber = rospy.Subscriber("/vesc/joy", Joy, self.tcb, queue_size=1)        
+    
         self.pressed = False	
+        rospy.logerr("backwards pure pursuit!")
 
     def tcb(self, msg):
         buttons = msg.buttons
@@ -52,6 +62,7 @@ class PurePursuit(object):
         self.trajectory.clear()
         self.trajectory.fromPoseArray(msg)
         self.trajectory.publish_viz(duration=0.0)
+        rospy.logerr("traj callback!")
 
     def odom_callback(self, msg):
         curposition = msg.pose.pose.position
@@ -60,6 +71,7 @@ class PurePursuit(object):
         self.x = curposition.x
         self.y = curposition.y
         poses = self.trajectory.points
+        rospy.logerr("odom callback!")
         if(poses == []):
             return
         
@@ -68,7 +80,7 @@ class PurePursuit(object):
         index = self.find_closest_segment_index(coordarr,self.current_location)
         goalpos = self.find_circle_intersection(index)
 
-        if (np.linalg.norm(self.current_location - np.array(poses[-1])) < self.thresh): # Car stop condition
+        if (np.linalg.norm(self.current_location - np.array(poses[0])) < self.thresh): # Car stop condition
             self.brake = True
         else:
             self.brake = False
@@ -122,7 +134,7 @@ class PurePursuit(object):
         if self.speed == 3:
             radius = 2.50
         else:
-            radius = 3.3425/4.0 * self.speed
+            radius = abs(3.3425/4.0 * self.speed)
 
         rx = self.x
         ry = self.y
@@ -188,7 +200,7 @@ class PurePursuit(object):
               solutionpoints.append((p[0], p[1]))
               found = True
             if(found):
-                answer = solutionpoints[-1]
+                answer = solutionpoints[0]
                 p = Pose()
                 point = Point()
                 m = Marker()
@@ -245,13 +257,14 @@ class PurePursuit(object):
         else:
             rospy.logerr("sending drive signal")
             AckermannDrive.drive.speed = self.speed
-            AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
+            AckermannDrive.drive.steering_angle = -1 * np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
         # AckermannDrive.drive.steering_angle = -1 * np.arctan(self.wheelbase_length * np.sin(eta) / (self.lookahead / 2  + lfw/np.cos(eta)))
-        if (self.pressed):
-            self.drive_pub2.publish(AckermannDrive)
+        if not self.in_sim:
+            if (self.pressed):
+                self.drive_pub2.publish(AckermannDrive)
         self.drive_pub.publish(AckermannDrive)
 
 

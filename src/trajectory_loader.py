@@ -8,8 +8,10 @@ class LoadTrajectory(object):
     """ Loads a trajectory from the file system and publishes it to a ROS topic.
     """
     def __init__(self):
+        rospy.loginfo("loading trajectory")
+        rospy.logerr("loading trajectory!")
         self.path           = rospy.get_param("~trajectory")
-
+    
         # initialize and load the trajectory
         self.trajectory = LineTrajectory("/loaded_trajectory")
         self.trajectory.load(self.path)
@@ -29,7 +31,10 @@ class LoadTrajectory(object):
 
     def publish_trajectory(self):
         print "Publishing trajectory to:", self.pub_topic
-        self.traj_pub.publish(self.trajectory.toPoseArray())
+        traj = self.trajectory.toPoseArray()
+        rospy.loginfo(traj)
+        rospy.logerr(traj)
+        self.traj_pub.publish(traj)
 
 if __name__=="__main__":
     rospy.init_node("load_trajectory")
