@@ -167,7 +167,7 @@ class PurePursuit(object):
         self.cterr_pub.publish(cterr)
 
         #rospy.logerr(self.trajectory.points)
-        for i in range(index, self.n - 1):
+        for i in range(index, -1, -1):
             x0 = self.trajectory.points[i][0]
             y0 = self.trajectory.points[i][1]
             x1 = self.trajectory.points[i + 1][0]
@@ -257,7 +257,7 @@ class PurePursuit(object):
         else:
             rospy.logerr("sending drive signal")
             AckermannDrive.drive.speed = self.speed
-            AckermannDrive.drive.steering_angle = -1 * np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
+            AckermannDrive.drive.steering_angle = np.arctan2(2 * self.wheelbase_length * np.sin(eta), np.sqrt(goalx**2 + goaly**2))
 
         #generalized sttering law by having a point ahead lecture slides
         # lfw = 0.05 #randomly defined based on lecture slides
