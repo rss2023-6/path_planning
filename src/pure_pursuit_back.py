@@ -43,7 +43,7 @@ class PurePursuit(object):
         self.y = self.current_location[1]
         self.theta = 0
         self.brake = False # Boolean condition to determine whether to stop
-        self.thresh = self.speed # distance from final path point at which car will stop
+        self.thresh = 1.0 # distance from final path point at which car will stop
     
         self.pressed = False	
         rospy.logerr("backwards pure pursuit!")
@@ -71,7 +71,6 @@ class PurePursuit(object):
         self.x = curposition.x
         self.y = curposition.y
         poses = self.trajectory.points
-        rospy.logerr("odom callback!")
         if(poses == []):
             return
         
@@ -118,23 +117,26 @@ class PurePursuit(object):
         return np.argmin(closest_points)
 
     def find_circle_intersection(self, index):
-        if self.speed == 4:
-            radius = 3.3425
-            #3.340 was good but slightly drifting near the column
-            #3.3425 went out near the column
-            #3.3437
-            #3.345 was oversmooth
-        if self.speed == 1:
-            radius = 1.68
-            #0.845 was too smooth
-            #0.835 worked pretty well but drifted on Penny's computer
-        if self.speed == 2:
-            radius = 1.67
-            #1.67 had a lot of odometry drifting
-        if self.speed == 3:
-            radius = 2.50
-        else:
-            radius = abs(3.3425/4.0 * self.speed)
+        if(self.speed > 0):
+            if self.speed == 4:
+                radius = 3.3425
+                #3.340 was good but slightly drifting near the column
+                #3.3425 went out near the column
+                #3.3437
+                #3.345 was oversmooth
+            if self.speed == 1:
+                radius = 1.68
+                #0.845 was too smooth
+                #0.835 worked pretty well but drifted on Penny's computer
+            if self.speed == 2:
+                radius = 1.67
+                #1.67 had a lot of odometry drifting
+            if self.speed == 3:
+                radius = 2.50
+            else:
+                radius = (3.3425/4.0 * self.speed)
+        if self.speed < 0:
+            radius = abs(3.3425/4.0 * self.speed) + 0.32
 
         rx = self.x
         ry = self.y
