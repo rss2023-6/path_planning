@@ -18,9 +18,15 @@ class PurePursuit(object):
     """ Implements Pure Pursuit trajectory tracking with a fixed lookahead and speed.
     """
     def __init__(self):
+        self.turn_around_indices = []
+        #segment 0 is turn_around_indices[0] to turn_around_indices[1]
+        #current segment of forward / backward
+        self.curr_segment = 0
+        self.turn_point_sub = rospy.Subscriber('/turnpoints', PoseArray, self.turn_cb, queue_size =1)
+
         self.odom_topic       = rospy.get_param("~odom_topic","/pf/pose/odom")
         self.lookahead        = 1.5 #filled in for testing purposes, please update, larger is more smooth and smaller is more oscillations
-        self.speed            = -0.4 #filled in for testing purposes, please update
+        self.speed            = 0.4 #filled in for testing purposes, please update
         self.wheelbase_length = 0.32 #flilled in for testing purposes, please update
         self.trajectory  = utils.LineTrajectory("/followed_trajectory")
         self.traj_sub = rospy.Subscriber("/trajectory/current", PoseArray, self.trajectory_callback, queue_size=1)
@@ -39,14 +45,24 @@ class PurePursuit(object):
         self.goal_point_pub = rospy.Publisher('/pure_pursuit_goal', Marker, queue_size = 1)
         self.odom_sub = rospy.Subscriber(self.odom_topic, Odometry, self.odom_callback, queue_size=1)
         self.current_location = np.array([0,0])
+
         self.x = self.current_location[0]
         self.y = self.current_location[1]
         self.theta = 0
         self.brake = False # Boolean condition to determine whether to stop
-        self.thresh = 1.0 # distance from final path point at which car will stop
-    
+
+        #TODO: TUNE THIS
+        self.thresh = 0.1 # distance from final path point at which car will stop
         self.pressed = False	
-        rospy.logerr("backwards pure pursuit!")
+        rospy.logerr("2 way pursuit!")
+
+    def turn_cb(self, msg):
+        #TODO: Read the index of the turn points from  msg
+
+        #array of index of points where the car reverses direction, assuming starting forwards, 
+        # first element must be 0, last element must be n-1
+        self.turn_around_indices = []
+        pass
 
     def tcb(self, msg):
         buttons = msg.buttons
@@ -67,10 +83,13 @@ class PurePursuit(object):
     def odom_callback(self, msg):
         curposition = msg.pose.pose.position
         curorientation = msg.pose.pose.orientation
+
         self.current_location = np.array([curposition.x,curposition.y])
         self.x = curposition.x
         self.y = curposition.y
-        poses = self.trajectory.points
+
+        #only get from current segment
+        poses = self.trajectory.points[self.turn_around_indices[self.curr_segment]:self.turn_around_indices[self.curr_segment + 1]]
         if(poses == []):
             return
         
@@ -78,8 +97,12 @@ class PurePursuit(object):
         coordarr = self.get_coordinate_array2(poses)
         index = self.find_closest_segment_index(coordarr,self.current_location)
         goalpos = self.find_circle_intersection(index)
-
-        if (np.linalg.norm(self.current_location - np.array(poses[0])) < self.thresh): # Car stop condition
+    
+        if (np.linalg.norm(self.current_location - np.array(poses[self.curr_segment + 1])) < self.thresh): # Car stop condition
+            self.curr_segment += 1
+            self.speed = -1.0 * self.speed
+        
+        if (np.linalg.norm(self.current_location - np.array(poses[len(self.trajectory.points) - 1])) < self.thresh):
             self.brake = True
         else:
             self.brake = False
@@ -117,6 +140,7 @@ class PurePursuit(object):
         return np.argmin(closest_points)
 
     def find_circle_intersection(self, index):
+        #TODO: TUNE RADIUS
         if(self.speed > 0):
             if self.speed == 4:
                 radius = 3.3425
@@ -136,6 +160,7 @@ class PurePursuit(object):
             else:
                 radius = (3.3425/4.0 * self.speed)
         if self.speed < 0:
+            #TODO: TUNE RADIUS
             radius = abs(3.3425/4.0 * self.speed) + 0.32
 
         rx = self.x
@@ -169,7 +194,10 @@ class PurePursuit(object):
         self.cterr_pub.publish(cterr)
 
         #rospy.logerr(self.trajectory.points)
-        for i in range(index, -1, -1):
+        start = self.turn_around_indices[self.curr_segment]
+        end = self.turn_around_indices[self.curr_segment]
+
+        for i in range(start, end):
             x0 = self.trajectory.points[i][0]
             y0 = self.trajectory.points[i][1]
             x1 = self.trajectory.points[i + 1][0]
@@ -202,7 +230,7 @@ class PurePursuit(object):
               solutionpoints.append((p[0], p[1]))
               found = True
             if(found):
-                answer = solutionpoints[0]
+                answer = solutionpoints[-1]
                 p = Pose()
                 point = Point()
                 m = Marker()
